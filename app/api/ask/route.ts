@@ -138,7 +138,7 @@ async function callGemini(question: string): Promise<LlmResult> {
   
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`, // Changed this line
       {
         method: 'POST',
         headers: {
@@ -253,19 +253,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { question } = RequestSchema.parse(body);
 
+    // Debug environment variables
+    console.log('Environment check:', {
+      openai: !!process.env.OPENAI_API_KEY,
+      anthropic: !!process.env.ANTHROPIC_API_KEY,
+      gemini: !!process.env.GEMINI_API_KEY,
+      mistral: !!process.env.MISTRAL_API_KEY,
+    });
+
     // Check for required API keys
     const missingKeys = [];
     if (!process.env.OPENAI_API_KEY) missingKeys.push('OPENAI_API_KEY');
     if (!process.env.ANTHROPIC_API_KEY) missingKeys.push('ANTHROPIC_API_KEY');
-    if (!process.env.GEMINI_API_KEY) missingKeys.push('GEMINI_API_KEY');
+    if (!process.env.GOOGLE_AI_API_KEY) missingKeys.push('GOOGLE_AI_API_KEY'); // Changed this line
     if (!process.env.MISTRAL_API_KEY) missingKeys.push('MISTRAL_API_KEY');
 
-    if (missingKeys.length > 0) {
-      return NextResponse.json(
-        { error: `Missing API keys: ${missingKeys.join(', ')}` },
-        { status: 500 }
-      );
-    }
+    console.log('Missing keys:', missingKeys);
 
     // Call all providers in parallel with timeout
     const timeout = 25000; // 25 seconds
@@ -301,8 +304,8 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('API Error:', error);
-    
+    console.error('Full error details:', error);
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: 'Invalid request', details: error.issues },
