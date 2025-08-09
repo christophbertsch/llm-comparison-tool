@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { LlmResult } from './api/ask/route';
+import { LlmResult, LlmAssessment } from './api/ask/route';
 
 interface ApiResponse {
   question: string;
   results: LlmResult[];
+  assessments: LlmAssessment[];
 }
 
 export default function Home() {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<LlmResult[]>([]);
+  const [assessments, setAssessments] = useState<LlmAssessment[]>([]);
   const [lastQuestion, setLastQuestion] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,6 +22,7 @@ export default function Home() {
 
     setLoading(true);
     setResults([]);
+    setAssessments([]);
     
     try {
       const response = await fetch('/api/ask', {
@@ -37,6 +40,11 @@ export default function Home() {
       const data: ApiResponse = await response.json();
       setResults(data.results);
       setLastQuestion(data.question);
+      
+      // Handle assessments
+      if (data.assessments && data.assessments.length > 0) {
+        setAssessments(data.assessments);
+      }
     } catch (error) {
       console.error('Error:', error);
       // Create error results for all providers
@@ -116,7 +124,7 @@ export default function Home() {
               disabled={!question.trim() || loading}
               className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? 'Asking...' : 'Ask All Providers'}
+              {loading ? 'Asking & Analyzing...' : 'Ask All Providers'}
             </button>
           </form>
         </div>
@@ -189,6 +197,62 @@ export default function Home() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Assessments Section */}
+            {assessments.length > 0 && !loading && (
+              <div className="mt-12">
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                    AI Assessments & Analysis
+                  </h2>
+                  <p className="text-gray-600">
+                    Each AI provider evaluates all responses, providing assessments, summaries, and fact-checking.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {assessments.map((assessment) => (
+                    <div
+                      key={assessment.provider}
+                      className={`bg-white rounded-lg border-2 p-6 ${getProviderColor(assessment.provider)}`}
+                    >
+                      {/* Header */}
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-gray-800">
+                          {getProviderDisplayName(assessment.provider)} Analysis
+                        </h3>
+                        {assessment.latencyMs && (
+                          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                            {assessment.latencyMs}ms
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Assessment Content */}
+                      <div className="space-y-3">
+                        {assessment.ok ? (
+                          <>
+                            <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                              {assessment.assessment}
+                            </div>
+                            {assessment.finishReason && (
+                              <div className="text-xs text-gray-500">
+                                Finish reason: {assessment.finishReason}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-sm text-red-600 bg-red-50 p-3 rounded border border-red-200">
+                            <div className="font-medium mb-1">Assessment Error:</div>
+                            <div className="whitespace-pre-wrap">{assessment.error}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

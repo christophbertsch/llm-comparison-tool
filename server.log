@@ -8,12 +8,12 @@
    - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 2.9s
+ ✓ Ready in 2.1s
  ○ Compiling / ...
- ✓ Compiled / in 3.1s (575 modules)
- GET / 200 in 3704ms
+ ✓ Compiled / in 3.2s (575 modules)
+ GET / 200 in 3758ms
  ○ Compiling /api/ask ...
- ✓ Compiled /api/ask in 554ms (645 modules)
- GET / 200 in 179ms
- POST /api/ask 200 in 991ms
+ ✓ Compiled /api/ask in 586ms (645 modules)
+ GET / 200 in 183ms
+ POST /api/ask 200 in 1143ms
 [?25h

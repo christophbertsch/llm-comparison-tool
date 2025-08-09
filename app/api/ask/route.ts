@@ -25,8 +25,28 @@ export type LlmResult = {
   finishReason?: string | null;
 };
 
+// Response type for LLM assessments
+export type LlmAssessment = {
+  provider: "openai" | "anthropic" | "gemini" | "mistral";
+  ok: boolean;
+  assessment?: string;
+  error?: string;
+  latencyMs?: number;
+  finishReason?: string | null;
+};
+
 // System prompt for all providers
 const SYSTEM_PROMPT = "Answer succinctly and factually.";
+
+// Assessment prompt for evaluating responses
+const ASSESSMENT_PROMPT = `You are an expert evaluator analyzing AI responses. Your task is to:
+
+1. **Assess each response** for accuracy, completeness, and clarity
+2. **Compare approaches** and highlight different perspectives
+3. **Fact-check claims** and identify any potential inaccuracies
+4. **Provide an overall summary** of the response quality
+
+Be objective, fair, and constructive in your analysis. Rate each response and explain your reasoning.`;
 
 async function callOpenAI(question: string): Promise<LlmResult> {
   const startTime = Date.now();
@@ -247,6 +267,266 @@ async function callMistral(question: string): Promise<LlmResult> {
   }
 }
 
+// Assessment functions for each provider
+async function assessWithOpenAI(question: string, responses: LlmResult[]): Promise<LlmAssessment> {
+  const startTime = Date.now();
+  
+  try {
+    const responsesText = responses.map((r, i) => 
+      `**Response ${i + 1} (${r.provider.toUpperCase()}):**\n${r.ok ? r.text : `Error: ${r.error}`}`
+    ).join('\n\n');
+
+    const assessmentPrompt = `Original Question: "${question}"
+
+${responsesText}
+
+${ASSESSMENT_PROMPT}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODELS.openai,
+        messages: [
+          { role: "system", content: ASSESSMENT_PROMPT },
+          { role: "user", content: assessmentPrompt }
+        ],
+        max_tokens: 1500,
+      }),
+    });
+
+    const latencyMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        provider: "openai",
+        ok: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+        latencyMs,
+      };
+    }
+
+    const data = await response.json();
+    const choice = data.choices?.[0];
+    
+    return {
+      provider: "openai",
+      ok: true,
+      assessment: choice?.message?.content || "No assessment provided",
+      latencyMs,
+      finishReason: choice?.finish_reason || null,
+    };
+  } catch (error) {
+    return {
+      provider: "openai",
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      latencyMs: Date.now() - startTime,
+    };
+  }
+}
+
+async function assessWithAnthropic(question: string, responses: LlmResult[]): Promise<LlmAssessment> {
+  const startTime = Date.now();
+  
+  try {
+    const responsesText = responses.map((r, i) => 
+      `**Response ${i + 1} (${r.provider.toUpperCase()}):**\n${r.ok ? r.text : `Error: ${r.error}`}`
+    ).join('\n\n');
+
+    const assessmentPrompt = `Original Question: "${question}"
+
+${responsesText}
+
+Please provide your assessment of these responses.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODELS.anthropic,
+        max_tokens: 1500,
+        system: ASSESSMENT_PROMPT,
+        messages: [
+          { role: "user", content: assessmentPrompt }
+        ],
+      }),
+    });
+
+    const latencyMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        provider: "anthropic",
+        ok: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+        latencyMs,
+      };
+    }
+
+    const data = await response.json();
+    const textParts = data.content?.filter((c: { type: string }) => c.type === 'text').map((c: { text: string }) => c.text) || [];
+    
+    return {
+      provider: "anthropic",
+      ok: true,
+      assessment: textParts.join('') || "No assessment provided",
+      latencyMs,
+      finishReason: data.stop_reason || null,
+    };
+  } catch (error) {
+    return {
+      provider: "anthropic",
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      latencyMs: Date.now() - startTime,
+    };
+  }
+}
+
+async function assessWithGemini(question: string, responses: LlmResult[]): Promise<LlmAssessment> {
+  const startTime = Date.now();
+  
+  try {
+    const responsesText = responses.map((r, i) => 
+      `**Response ${i + 1} (${r.provider.toUpperCase()}):**\n${r.ok ? r.text : `Error: ${r.error}`}`
+    ).join('\n\n');
+
+    const assessmentPrompt = `Original Question: "${question}"
+
+${responsesText}
+
+Please provide your assessment of these responses.`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: assessmentPrompt }]
+            }
+          ],
+          systemInstruction: {
+            role: "system",
+            parts: [{ text: ASSESSMENT_PROMPT }]
+          },
+          generationConfig: {
+            maxOutputTokens: 1500,
+          },
+        }),
+      }
+    );
+
+    const latencyMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        provider: "gemini",
+        ok: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+        latencyMs,
+      };
+    }
+
+    const data = await response.json();
+    const candidate = data.candidates?.[0];
+    const textParts = candidate?.content?.parts?.filter((p: { text?: string }) => p.text).map((p: { text: string }) => p.text) || [];
+    
+    return {
+      provider: "gemini",
+      ok: true,
+      assessment: textParts.join('') || "No assessment provided",
+      latencyMs,
+      finishReason: candidate?.finishReason || null,
+    };
+  } catch (error) {
+    return {
+      provider: "gemini",
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      latencyMs: Date.now() - startTime,
+    };
+  }
+}
+
+async function assessWithMistral(question: string, responses: LlmResult[]): Promise<LlmAssessment> {
+  const startTime = Date.now();
+  
+  try {
+    const responsesText = responses.map((r, i) => 
+      `**Response ${i + 1} (${r.provider.toUpperCase()}):**\n${r.ok ? r.text : `Error: ${r.error}`}`
+    ).join('\n\n');
+
+    const assessmentPrompt = `Original Question: "${question}"
+
+${responsesText}
+
+Please provide your assessment of these responses.`;
+
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODELS.mistral,
+        messages: [
+          { role: "system", content: ASSESSMENT_PROMPT },
+          { role: "user", content: assessmentPrompt }
+        ],
+        max_tokens: 1500,
+      }),
+    });
+
+    const latencyMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        provider: "mistral",
+        ok: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+        latencyMs,
+      };
+    }
+
+    const data = await response.json();
+    const choice = data.choices?.[0];
+    
+    return {
+      provider: "mistral",
+      ok: true,
+      assessment: choice?.message?.content || "No assessment provided",
+      latencyMs,
+      finishReason: choice?.finish_reason || null,
+    };
+  } catch (error) {
+    return {
+      provider: "mistral",
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      latencyMs: Date.now() - startTime,
+    };
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Validate request body
@@ -298,9 +578,41 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Second round: Get assessments from each provider
+    // Only proceed with assessments if we have at least one successful response
+    const hasSuccessfulResponse = llmResults.some(result => result.ok);
+    let assessments: LlmAssessment[] = [];
+
+    if (hasSuccessfulResponse) {
+      const assessmentPromises = [
+        withTimeout(assessWithOpenAI(question, llmResults), timeout),
+        withTimeout(assessWithAnthropic(question, llmResults), timeout),
+        withTimeout(assessWithGemini(question, llmResults), timeout),
+        withTimeout(assessWithMistral(question, llmResults), timeout),
+      ];
+
+      const assessmentResults = await Promise.allSettled(assessmentPromises);
+
+      assessments = assessmentResults.map((result, index) => {
+        const providers: LlmAssessment['provider'][] = ['openai', 'anthropic', 'gemini', 'mistral'];
+        const provider = providers[index];
+
+        if (result.status === 'fulfilled') {
+          return result.value;
+        } else {
+          return {
+            provider,
+            ok: false,
+            error: result.reason?.message || 'Unknown error',
+          };
+        }
+      });
+    }
+
     return NextResponse.json({
       question,
       results: llmResults,
+      assessments,
     });
 
   } catch (error) {

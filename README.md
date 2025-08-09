@@ -5,10 +5,12 @@ A Next.js web application that sends the same question to four major AI provider
 ## Features
 
 - **Parallel API Calls**: Sends requests to all four providers simultaneously for fast results
+- **AI-Powered Assessments**: Each provider evaluates all responses with summaries and fact-checking
 - **Timeout Protection**: 25-second timeout prevents hanging requests
 - **Error Handling**: Graceful error handling with detailed error messages
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
 - **Real-time Metrics**: Shows response latency and finish reasons
+- **Meta-Analysis**: Get expert evaluations from each AI on the quality and accuracy of all responses
 - **Secure**: API keys are kept server-side only, never exposed to the client
 
 ## Supported Providers
@@ -116,7 +118,25 @@ npm run test
 2. Enter your question in the text area
 3. Click "Ask All Providers" or press Enter
 4. Wait for responses from all providers (up to 25 seconds)
-5. Compare the responses side-by-side
+5. Review the initial responses in the 4-column grid
+6. Scroll down to see AI assessments where each provider evaluates all responses
+
+## How It Works
+
+The application works in two phases:
+
+### Phase 1: Initial Responses
+- Sends your question to all four AI providers simultaneously
+- Each provider responds with their answer to your question
+- Results are displayed in a responsive grid with latency metrics
+
+### Phase 2: AI Assessments
+- Each AI provider receives all four responses from Phase 1
+- They evaluate the responses for accuracy, completeness, and clarity
+- Provide comparative analysis, summaries, and fact-checking
+- Display assessments in a 2x2 grid below the original responses
+
+This dual-phase approach gives you both the direct answers and expert analysis from each AI system.
 
 ## Changing Models
 
